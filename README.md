@@ -1,3 +1,4 @@
 # The-Hive
 few analysis 
-most of the files are analysis data from kaggle in R.
+
+most of the files are analysis kaggle data in R.
