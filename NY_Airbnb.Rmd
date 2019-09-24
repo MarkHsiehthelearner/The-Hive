@@ -1,0 +1,258 @@
+---
+title: "NY_Airbnb"
+author: "Minfeng"
+date: "2019Äê9ÔÂ24ÈÕ"
+output: pdf_document
+---
+
+Part Zero
+```{r}
+library(tidyverse)
+library(params)
+library(kableExtra)
+library(ggplot2)
+library(reshape2)
+library(data.table)
+library(sqldf)
+library(DataExplorer)
+library(corrplot)
+```
+
+
+Part One
+```{r}
+nyairbnb_allC <- read.csv("D:\\Bigdatabase\\Datadeposit\\new-york-city-airbnb-open-data\\AB_NYC_2019.csv", header = TRUE, stringsAsFactors = FALSE, quote = "", encoding = "GBK")
+
+nyairbnb_allC_medium <- nyairbnb_allC %>% select(host_id, host_name, neighbourhood_group, neighbourhood)
+
+# define function
+compare_fun <- function(data, column1, column2, column3, column4) {
+  v1 <- vector(length = nrow(data))
+  v2 <- vector(length = nrow(data))
+  v3 <- vector(length = nrow(data))
+  v4 <- vector(length = nrow(data))
+  v5 <- vector(length = nrow(data))
+  v6 <- vector(length = nrow(data))
+  
+  v1 <- ifelse(data[,column1] == data[,column3], TRUE, FALSE)
+  v2 <- ifelse(data[,column2] == data[,column3], TRUE, FALSE)
+  v3 <- ifelse(data[,column1] == data[,column4], TRUE, FALSE)
+  v4 <- ifelse(data[,column2] == data[,column4], TRUE, FALSE)
+  v5 <- ifelse(data[,column1] == data[,column2], TRUE, FALSE)
+  v6 <- ifelse(data[,column3] == data[,column4], TRUE, FALSE)
+  
+  print(sum(v1))
+  print(sum(v2))
+  print(sum(v3))
+  print(sum(v4))
+  print(sum(v5))
+  print(sum(v6))
+}
+
+# first time check
+compare_fun(nyairbnb_allC_medium, "host_id", "host_name", "neighbourhood_group", "neighbourhood")
+
+# remove all the rows with empty columns
+nyairbnb_allC_medium <- nyairbnb_allC[!nyairbnb_allC$host_id == "", ]
+nyairbnb_allC_medium <- nyairbnb_allC_medium[!nyairbnb_allC_medium$host_name == "", ]
+nyairbnb_allC_medium <- nyairbnb_allC_medium[!nyairbnb_allC_medium$neighbourhood_group == "", ]
+nyairbnb_allC_medium <- nyairbnb_allC_medium[!nyairbnb_allC_medium$neighbourhood == "", ]
+
+# second time check
+compare_fun(nyairbnb_allC_medium, "host_id", "host_name", "neighbourhood_group", "neighbourhood")
+  # still have some errors left
+
+# refine the data
+nyairbnb_allC_medium[nyairbnb_allC_medium$host_id == 15667008, ][,"host_name"] <- nyairbnb_allC_medium[nyairbnb_allC_medium$host_id == 15667008, ][,"host_id"]
+nyairbnb_allC_medium[nyairbnb_allC_medium$host_id == 21336136, ][,"host_name"] <- nyairbnb_allC_medium[nyairbnb_allC_medium$host_id == 21336136, ][,"host_id"]
+
+nyairbnb_allC_medium[nyairbnb_allC_medium$host_id == 605463, ][,"host_name"] <- nyairbnb_allC_medium[nyairbnb_allC_medium$host_id == 605463, ][,"host_id"]
+nyairbnb_allC_medium[nyairbnb_allC_medium$host_id == 15907782, ][,"host_name"] <- nyairbnb_allC_medium[nyairbnb_allC_medium$host_id == 15907782, ][,"host_id"]
+nyairbnb_allC_medium[nyairbnb_allC_medium$host_id == 167258458, ][,"host_name"] <- nyairbnb_allC_medium[nyairbnb_allC_medium$host_id == 167258458, ][,"host_id"]
+nyairbnb_allC_medium[nyairbnb_allC_medium$host_id == 177353847, ][,"host_name"] <- nyairbnb_allC_medium[nyairbnb_allC_medium$host_id == 177353847, ][,"host_id"]
+nyairbnb_allC_medium[nyairbnb_allC_medium$host_id == 205969507, ][,"host_name"] <- nyairbnb_allC_medium[nyairbnb_allC_medium$host_id == 205969507, ][,"host_id"]
+
+# third time check 
+compare_fun(nyairbnb_allC_medium, "host_id", "host_name", "neighbourhood_group", "neighbourhood")  # all good
+
+# resave the data
+nyairbnb_allC_tidy <- nyairbnb_allC_medium
+
+# merge the data, find out the unique records in the data
+nyairbnb_allC_tidy_table <- data.table(nyairbnb_allC_tidy)
+  # option 1
+nyairbnb_allC_tidy_1 <- as.data.frame(nyairbnb_allC_tidy_table[, .N, by = list(host_id, host_name, neighbourhood_group, neighbourhood)])
+nyairbnb_allC_tidy_1 <- arrange(nyairbnb_allC_tidy_1, desc(N))
+  # option 2
+nyairbnb_allC_tidy_2 <- as.data.frame(nyairbnb_allC_tidy_table[, .N, by = list(host_id, host_name)])
+nyairbnb_allC_tidy_2 <- arrange(nyairbnb_allC_tidy_2, desc(N))
+
+# print results
+head(nyairbnb_allC_tidy_1)
+head(nyairbnb_allC_tidy_2)
+
+# define function to plot
+make_plots = function(data, column,Threshold){
+  
+  PltData <- data[data[,column] > Threshold, ]
+  
+  Plt <- ggplot(PltData, aes(x = host_id, y = N)) +
+    geom_bar(stat="identity", fill="blue", color="green") +
+    theme_bw()+
+    theme(
+      panel.grid.major = element_line(colour = "white",size=0.25),
+      panel.grid.minor = element_blank(),
+      axis.text.x=element_text(size=10,angle=-30, hjust=0)
+    )
+  
+  Plt
+}
+
+
+# plot example
+make_plots(nyairbnb_allC_tidy_2, "N", 30)
+
+```
+
+
+Part Two -- build model
+```{r}
+nyairbnb <- read.csv("D:\\Bigdatabase\\Datadeposit\\new-york-city-airbnb-open-data\\AB_NYC_2019.csv", header = TRUE, stringsAsFactors = TRUE, quote = "", encoding = "GBK")
+
+nyairbnb_switched <- nyairbnb %>%
+  mutate(latitude = as.numeric(as.character(latitude)),
+         longitude = as.numeric(as.character(longitude)),
+         room_type = as.factor(room_type),
+         price = as.numeric(as.character(price)),
+         minimum_nights = as.numeric(minimum_nights),
+         number_of_reviews = as.numeric(number_of_reviews),
+         last_review = as.Date(last_review),
+         reviews_per_month = as.numeric(as.character(reviews_per_month)),
+         calculated_host_listings_count = as.numeric(calculated_host_listings_count),
+         availability_365 = as.numeric(availability_365),
+         neighbourhood_group = as.character(neighbourhood_group),
+         neighbourhood = as.character(neighbourhood),
+         host_id = as.character(host_id),
+         host_name = as.character(host_name))
+
+
+# plot_missing(nyairbnb_switched)
+# str(nyairbnb_switched)
+# head(nyairbnb_switched)
+
+nyairbnb_switched <- nyairbnb_switched[!nyairbnb_allC$host_id == "", ]
+nyairbnb_switched <- nyairbnb_switched[!nyairbnb_switched$host_name == "", ]
+nyairbnb_switched <- nyairbnb_switched[!nyairbnb_switched$neighbourhood_group == "", ]
+nyairbnb_switched <- nyairbnb_switched[!nyairbnb_switched$neighbourhood == "", ]
+
+## remove all the NAs in price
+# Trail
+# sum(is.na(nyairbnb_switched$price))
+# plot_missing(nyairbnb_switched_price)
+# str(nyairbnb_switched_price)
+
+# solution
+nyairbnb_switched_price <- nyairbnb_switched[complete.cases(nyairbnb_switched), ]
+  # COME BACK later to get a more precise way 
+complete_case <- nyairbnb_switched_price
+# str(complete_case)
+
+
+## prepare before the modeling
+# on price
+summary(complete_case$price)
+ggplot(complete_case, aes(x = price)) + 
+  geom_histogram(stat = "count", binwidth = 0.01)
+    # obvious skewed
+
+  # log(price) and plot
+ggplot(complete_case, aes(x = log(price))) +
+  geom_histogram(stat = "count", binwidth = 0.01)
+    # Damn it is ungly!!!! but better
+
+  # density plot
+ggplot(complete_case, aes(x = log(price))) +
+  geom_density()
+
+# shrink neighbour_group into the most five
+summary(complete_case$neighbourhood_group)
+complete_case <- complete_case %>% 
+filter(neighbourhood_group %in% c("Manhattan", "Brooklyn", "Queens", "Bronx","Staten Island"))
+
+complete_case <- complete_case %>% 
+  mutate(neighbourhood_group = as.factor(neighbourhood_group))
+# str(complete_case)
+
+# shrink room_type into the most three
+complete_case <- complete_case %>% mutate(room_type = as.character(room_type))
+for_rt <- complete_case
+for_rt <- for_rt %>% filter(room_type %in% c("Entire home/apt", "Private room", "Shared room"))
+
+for_rt %>% mutate(room_type = as.factor(room_type)) %>% 
+  select(room_type) %>%
+  summary()
+for_rt <- for_rt %>% mutate(room_type = as.factor(room_type))
+str(for_rt)  # great !
+full <- for_rt
+
+# shrink neighbour into the most 
+# full %>% 
+#   mutate(neighbourhood = as.factor(neighbourhood)) %>%
+#   select(neighbourhood) %>%
+#   summary()
+  # LEAVE THIS FOR NOW!!
+
+# so, use log(price) as y, glm model, family = Gaussian
+set.seed(1415)
+ind <- sample(nrow(full), size = 0.7*nrow(full), replace = FALSE)
+train <- full[ind, ]
+test <- full[-ind, ]
+
+# check out the correlation via Correlation Matrix
+full_cor <- full %>% select(price, minimum_nights, number_of_reviews, 
+                            reviews_per_month, calculated_host_listings_count, 
+                            availability_365)
+cor_matrix <- cor(full_cor, method = "spearman")
+corrplot(cor_matrix, method = "color")
+  # why the fuck is it so ugly ??
+  # nothing is too serious, but keep an eye on review_per_month vs mini_nights and 
+                                            #  365 vs review_per_month
+
+## modeling
+
+# glm model one
+# remove all the 0s in price
+full_cor <- full_cor[!full_cor$price == 0, ]
+# str(full_cor)
+
+model_glm_nofactor <- glm(log(price) ~ minimum_nights + number_of_reviews + reviews_per_month + calculated_host_listings_count + availability_365, 
+                          data = full_cor, family = gaussian)
+summary(model_glm_nofactor)
+
+# glm model two
+full <- full[!full$price == 0, ]
+model_glm_comp <- glm(log(price) ~ minimum_nights + number_of_reviews + reviews_per_month + calculated_host_listings_count + availability_365 + neighbourhood_group + room_type, 
+                      data = full, family = gaussian)
+# print(model_glm_comp)
+summary(model_glm_comp)
+
+# results analysis
+plot(model_glm_comp$fitted.values, model_glm_comp$residuals)
+  # well, I would say, tipical heteroscedasticity£¬ 
+    # need some treatment for predictors
+
+
+
+```
+
+
+```{r}
+
+```
+
+
+```{r}
+
+```
+
+
